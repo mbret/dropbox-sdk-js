@@ -1,9 +1,10 @@
-import { fail } from 'assert';
 import chai from 'chai';
 import sinon from 'sinon';
-
+import chaiAsPromised from 'chai-as-promised';
+import regeneratorRuntime from 'regenerator-runtime';
 import { Dropbox, DropboxAuth } from '../../index.js';
 
+chai.use(chaiAsPromised);
 describe('DropboxAuth', () => {
   describe('accessToken', () => {
     it('can be set in the constructor', () => {
@@ -62,20 +63,19 @@ describe('DropboxAuth', () => {
 
     it('throws an error if the redirect url isn\'t set and type is code', () => {
       const dbx = new Dropbox({ clientId: 'CLIENT_ID' });
-      chai.assert.equal(
+      return chai.expect(
         dbx.auth.getAuthenticationUrl('', null, 'code'),
-        'https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=CLIENT_ID',
-      );
+      ).to.eventually.deep.equal('https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=CLIENT_ID');
     });
 
-    it('returns correct auth url with all combinations of valid input', () => {
+    it('returns correct auth url with all combinations of valid input', async () => {
       const dbx = new Dropbox({ clientId: 'CLIENT_ID' });
       for (const redirectUri of ['', 'localhost']) {
         for (const state of ['', 'state']) {
           for (const tokenAccessType of [null, 'legacy', 'offline', 'online']) {
             for (const scope of [null, ['files.metadata.read', 'files.metadata.write']]) {
               for (const includeGrantedScopes of ['none', 'user', 'team']) {
-                const url = dbx.auth.getAuthenticationUrl(redirectUri, state, 'code', tokenAccessType, scope, includeGrantedScopes);
+                const url = await dbx.auth.getAuthenticationUrl(redirectUri, state, 'code', tokenAccessType, scope, includeGrantedScopes); // eslint-disable-line no-await-in-loop
 
                 chai.assert(url.startsWith('https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=CLIENT_ID'));
 
@@ -193,11 +193,15 @@ describe('DropboxAuth', () => {
       chai.assert.isTrue(!!dbxAuth.codeChallenge);
     });
 
-    it('gets called when using PKCE flow', () => {
+    it('gets called when using PKCE flow', (done) => {
       const dbxAuth = new DropboxAuth({ clientId: 'foo' });
       const pkceSpy = sinon.spy(dbxAuth, 'generatePKCECodes');
-      dbxAuth.getAuthenticationUrl('test', null, undefined, undefined, undefined, undefined, true);
-      chai.assert.isTrue(pkceSpy.calledOnce);
+      dbxAuth.getAuthenticationUrl('test', null, undefined, undefined, undefined, undefined, true)
+        .then(() => {
+          chai.assert.isTrue(pkceSpy.calledOnce);
+          done();
+        })
+        .catch(done);
     });
   });
 
